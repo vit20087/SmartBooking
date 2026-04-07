@@ -1,1 +1,2 @@
-SmartBooking-Система онлайн бронювання послуг
+# SmartBooking
+SmartBooking-Система онлайн-бронювання послуг
