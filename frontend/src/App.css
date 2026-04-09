@@ -298,7 +298,7 @@ body {
   border-color: #00a3a6;
 }
 
-/* ─── Модалка бронювання ─── */
+/* ─── Модалка ─── */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -324,9 +324,88 @@ body {
   animation: modalIn 0.25s ease;
 }
 
+/* ─── ФІКС МОДАЛОК (бронювання) ─── */
+.modal-content h1,
+.modal-content h2,
+.modal-content h3,
+.modal-content h4,
+.modal-content p,
+.modal-content label,
+.modal-content span,
+.modal-content strong,
+.modal-content div,
+.modal-content em {
+  color: #000000 !important;
+}
+
+.input-field::placeholder {
+  color: #222222 !important;
+  opacity: 1;
+}
+
+.modal-content .btn-primary,
+.modal-content .btn-book {
+  color: white !important;
+}
+
+.modal-content button:not(.btn-primary):not(.btn-book) {
+  color: inherit !important;
+}
+
+/* КАЛЕНДАР — ЗАЛИШАЄМО ЧОРНИМ, як було в оригіналі */
+.modal-content input[type="date"] {
+  background-color: #1a1a1a !important;
+  color: #ffffff !important;
+  border: 1px solid #444 !important;
+}
+
+/* ─── ФІКС СТОРІНКИ РЕЄСТРАЦІЇ / ЛОГІНУ ─── */
+div[style*="max-width: 420"] h2,
+div[style*="max-width: 420"] p,
+div[style*="max-width: 420"] label,
+div[style*="max-width: 420"] span,
+div[style*="max-width: 420"] strong {
+  color: #000000 !important;
+}
+
+div[style*="max-width: 420"] .input-field::placeholder {
+  color: #222222 !important;
+  opacity: 1;
+}
+
+div[style*="max-width: 420"] .btn-primary {
+  color: white !important;
+}
+
+div[style*="max-width: 420"] p[style*="color: #00a3a6"] {
+  color: #00a3a6 !important;
+}
+
 @keyframes modalIn {
   from { opacity: 0; transform: translateY(16px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── Таблиці ─── */
+table td,
+table th {
+  color: #1A1A1A;
+}
+
+table th {
+  background-color: #1F4E79;
+  color: #FFFFFF;
+}
+
+table tr:nth-child(even) {
+  background-color: #F5F5F5;
+}
+
+/* ─── Код-блоки ─── */
+pre,
+code {
+  background-color: #1E1E1E;
+  color: #D4D4D4;
 }
 
 /* ─── Адаптивність ─── */
