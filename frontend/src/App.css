@@ -420,3 +420,31 @@ code {
   .navbar { flex-wrap: wrap; gap: 10px; }
   .modal-content { padding: 22px; }
 }
+
+
+.profile-page {
+  padding: 40px 5%;
+  max-width: 900px;
+  margin: 0 auto;
+  color: #1a1a1a;               /* темний текст для всього вмісту */
+}
+
+.profile-page h1,
+.profile-page h2,
+.profile-page h3,
+.profile-page p,
+.profile-page strong,
+.profile-page small {
+  color: inherit;               /* успадковує темний колір */
+}
+
+.profile-page .btn-primary,
+.profile-page .btn-book,
+.profile-page button {
+  color: white;                 /* кнопки залишаються білими */
+}
+
+/* виняток для кнопок зі світлим фоном */
+.profile-page button[style*="background: #dc3545"] {
+  color: white !important;
+}

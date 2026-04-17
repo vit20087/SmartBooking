@@ -540,7 +540,7 @@ function ProfilePage({ user }) {
   };
 
   return (
-      <div style={{ padding: '40px 5%', maxWidth: 900, margin: '0 auto' }}>
+      <div className="profile-page">
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 32 }}>
           <img src={user.photoUrl || 'https://i.pravatar.cc/80'} alt={user.name}
                style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }} />
