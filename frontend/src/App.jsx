@@ -41,8 +41,10 @@ function App() {
   }, [user]);
 
   const handleLogout = () => {
-    setUser(null);
-    window.location.href = '/';
+    if (window.confirm('Ви впевнені, що хочете вийти?')) {
+      setUser(null);
+      window.location.href = '/';
+    }
   };
 
   return (
@@ -70,8 +72,20 @@ function App() {
           <Route path="/login" element={user ? <Navigate to="/" /> : <AuthPage setUser={setUser} />} />
           <Route path="/profile" element={user ? <ProfilePage user={user} setUser={setUser} /> : <Navigate to="/login" />} />
           <Route path="/admin" element={user?.role === 'MASTER' ? <AdminPage user={user} services={services} setServices={setServices} /> : <Navigate to="/" />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
+  );
+}
+
+/* ─────────── Сторінка 404 ─────────── */
+function NotFound() {
+  return (
+      <div style={{ textAlign: 'center', padding: 80 }}>
+        <h1 style={{ fontSize: 64, marginBottom: 20 }}>404</h1>
+        <p style={{ fontSize: 20, marginBottom: 30 }}>Сторінку не знайдено</p>
+        <Link to="/" className="btn-primary" style={{ padding: '12px 30px' }}>На головну</Link>
+      </div>
   );
 }
 
@@ -94,7 +108,6 @@ function HomePage({ services, user }) {
         s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (s.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (s.master?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    // Фільтр по категорії — використовуємо поле category
     const matchCat = category === 'Всі' || s.category === category;
     const matchPrice = s.price >= minPrice && s.price <= maxPrice;
     return matchSearch && matchCat && matchPrice;
@@ -176,9 +189,8 @@ function HomePage({ services, user }) {
                   const reviewCount = service.master?.reviewCount || 0;
                   return (
                       <div className="service-card" key={service.id}>
-                        <img src={getServiceImage(service)} alt={service.name} className="service-image" />
+                        <img src={getServiceImage(service)} alt={service.name} className="service-image" loading="lazy" />
 
-                        {/* Бейдж категорії */}
                         <div style={{
                           position: 'relative',
                           marginTop: -32,
@@ -208,25 +220,22 @@ function HomePage({ services, user }) {
                           )}
                           <div className="service-meta">
                             <span>⏱ {service.durationMin} хв</span>
-                            <span>⭐ {rating.toFixed(1)}</span>
+                            <span className="rating-link" onClick={() => setSelectedService({...service, showReviews: true})}>
+                              ⭐ {rating.toFixed(1)}
+                            </span>
                             {reviewCount > 0 && <span style={{ color: '#aaa' }}>({reviewCount} відгуків)</span>}
                           </div>
-                          <div className="service-actions" style={{ display: 'flex', gap: 10 }}>
+                          <div className="service-actions">
                             <button className="btn-book" style={{ flex: 1 }} onClick={() => setSelectedService(service)}>
                               Забронювати
                             </button>
                             <button
                                 onClick={() => toggleFavorite(service.id)}
                                 title={isFav ? 'Прибрати з обраного' : 'Додати в обране'}
+                                className="favorite-btn"
                                 style={{
                                   background: isFav ? '#ff4081' : '#f0f0f0',
                                   color: isFav ? '#fff' : '#999',
-                                  width: 46,
-                                  borderRadius: 8,
-                                  border: 'none',
-                                  fontSize: 18,
-                                  cursor: 'pointer',
-                                  transition: 'all 0.2s'
                                 }}
                             >
                               ❤️
@@ -240,14 +249,58 @@ function HomePage({ services, user }) {
           )}
         </main>
 
-        {selectedService && (
+        {selectedService && !selectedService.showReviews && (
             <BookingModal service={selectedService} user={user} onClose={() => setSelectedService(null)} />
+        )}
+        {selectedService && selectedService.showReviews && (
+            <ReviewsModal service={selectedService} onClose={() => setSelectedService(null)} />
         )}
       </>
   );
 }
 
-/* ─────────── МОДАЛКА БРОНЮВАННЯ ─────────── */
+/* ─────────── МОДАЛКА ВІДГУКІВ ─────────── */
+function ReviewsModal({ service, onClose }) {
+  const [reviews, setReviews] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    axios.get(`${API}/services/${service.id}/reviews`)
+        .then(res => { setReviews(res.data); setLoading(false); })
+        .catch(() => setLoading(false));
+  }, [service.id]);
+
+  return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
+          <button onClick={onClose} className="modal-close-btn">✕</button>
+          <h3 style={{ marginBottom: 10 }}>Відгуки про "{service.name}"</h3>
+          <p style={{ color: '#666', marginBottom: 20 }}>
+            ⭐ Середній рейтинг: {service.master?.rating?.toFixed(1) || '5.0'} ({reviews.length})
+          </p>
+          {loading ? <p>Завантаження...</p> : reviews.length === 0 ? (
+              <p style={{ color: '#888', textAlign: 'center' }}>Ще немає відгуків</p>
+          ) : (
+              <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+                {reviews.map(r => (
+                    <div key={r.id} style={{ borderBottom: '1px solid #eee', padding: '12px 0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <strong>{r.user?.name || 'Клієнт'}</strong>
+                        <span>⭐ {r.rating}</span>
+                      </div>
+                      <p style={{ margin: '8px 0 4px' }}>{r.comment}</p>
+                      <small style={{ color: '#aaa' }}>{new Date(r.createdAt).toLocaleDateString('uk-UA')}</small>
+                    </div>
+                ))}
+              </div>
+          )}
+          <button onClick={onClose} className="btn-secondary" style={{ marginTop: 20, width: '100%' }}>Закрити</button>
+        </div>
+      </div>
+  );
+}
+
+/* ─────────── МОДАЛКА БРОНЮВАННЯ (з перевіркою слотів) ─────────── */
 function BookingModal({ service, user, onClose }) {
   const [date, setDate] = useState(() => {
     const d = new Date();
@@ -256,17 +309,37 @@ function BookingModal({ service, user, onClose }) {
   });
   const [time, setTime] = useState('10:00');
   const [loading, setLoading] = useState(false);
+  const [bookedSlots, setBookedSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const navigate = useNavigate();
 
   const timeSlots = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
-
   const today = new Date().toISOString().split('T')[0];
+
+  useEffect(() => {
+    if (!date) return;
+    const fetchBooked = async () => {
+      setLoadingSlots(true);
+      try {
+        const res = await axios.get(`${API}/bookings/availability`, {
+          params: { serviceId: service.id, date }
+        });
+        setBookedSlots(res.data.bookedSlots || []);
+      } catch { setBookedSlots([]); }
+      finally { setLoadingSlots(false); }
+    };
+    fetchBooked();
+  }, [date, service.id]);
 
   const handleBook = async () => {
     if (!user) {
       if (window.confirm('Для бронювання потрібно увійти в акаунт. Перейти до сторінки входу?')) {
         navigate('/login');
       }
+      return;
+    }
+    if (bookedSlots.includes(time)) {
+      alert('Цей час уже зайнятий. Оберіть інший.');
       return;
     }
     setLoading(true);
@@ -289,7 +362,7 @@ function BookingModal({ service, user, onClose }) {
   return (
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal-content" onClick={e => e.stopPropagation()}>
-          <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#666' }}>✕</button>
+          <button onClick={onClose} className="modal-close-btn">✕</button>
 
           <h3 style={{ fontSize: 20, marginBottom: 8 }}>{service.name}</h3>
           <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 16 }}>
@@ -319,37 +392,44 @@ function BookingModal({ service, user, onClose }) {
           />
 
           <label style={{ fontWeight: 600, fontSize: 14, display: 'block', marginBottom: 8 }}>Оберіть час</label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 24 }}>
-            {timeSlots.map(t => (
-                <button
-                    key={t}
-                    onClick={() => setTime(t)}
-                    style={{
-                      padding: '8px 0',
-                      borderRadius: 8,
-                      border: `2px solid ${time === t ? '#00a3a6' : '#eee'}`,
-                      background: time === t ? '#00a3a6' : '#fff',
-                      color: time === t ? '#fff' : '#333',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      transition: 'all 0.15s'
-                    }}
-                >
-                  {t}
-                </button>
-            ))}
-          </div>
+          {loadingSlots ? <p>Перевірка зайнятості...</p> : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 24 }}>
+                {timeSlots.map(t => {
+                  const isBooked = bookedSlots.includes(t);
+                  return (
+                      <button
+                          key={t}
+                          onClick={() => !isBooked && setTime(t)}
+                          disabled={isBooked}
+                          style={{
+                            padding: '8px 0',
+                            borderRadius: 8,
+                            border: `2px solid ${time === t ? '#00a3a6' : '#eee'}`,
+                            background: isBooked ? '#f0f0f0' : (time === t ? '#00a3a6' : '#fff'),
+                            color: isBooked ? '#aaa' : (time === t ? '#fff' : '#333'),
+                            fontWeight: 600,
+                            cursor: isBooked ? 'not-allowed' : 'pointer',
+                            fontSize: 13,
+                            transition: 'all 0.15s',
+                            textDecoration: isBooked ? 'line-through' : 'none'
+                          }}
+                      >
+                        {t}
+                      </button>
+                  );
+                })}
+              </div>
+          )}
 
           <button
               className="btn-primary"
               onClick={handleBook}
-              disabled={loading}
+              disabled={loading || loadingSlots}
               style={{ width: '100%', marginBottom: 10, opacity: loading ? 0.7 : 1 }}
           >
             {loading ? 'Обробка...' : 'Підтвердити запис'}
           </button>
-          <button onClick={onClose} style={{ width: '100%', padding: '12px', background: 'none', border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer', fontSize: 15 }}>
+          <button onClick={onClose} className="btn-secondary" style={{ width: '100%' }}>
             Скасувати
           </button>
         </div>
@@ -386,19 +466,11 @@ function MastersPage({ user }) {
               <p>Майстрів ще не додано. Запустіть seed-masters.js</p>
             </div>
         ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 30 }}>
+            <div className="masters-grid">
               {masters.map(master => (
-                  <div key={master.id} style={{
-                    background: '#fff', borderRadius: 16, overflow: 'hidden',
-                    boxShadow: '0 8px 25px rgba(0,0,0,0.08)',
-                    transition: 'transform 0.2s, box-shadow 0.2s'
-                  }}
-                       onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.boxShadow = '0 16px 35px rgba(0,0,0,0.13)'; }}
-                       onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.08)'; }}
-                  >
-                    <img src={master.photoUrl} alt={master.name} style={{ width: '100%', height: 240, objectFit: 'cover' }} />
-
-                    <div style={{ padding: 20 }}>
+                  <div key={master.id} className="master-card">
+                    <img src={master.photoUrl} alt={master.name} loading="lazy" />
+                    <div className="master-content">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         <h3 style={{ margin: 0, fontSize: 20 }}>{master.name}</h3>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -407,41 +479,34 @@ function MastersPage({ user }) {
                         </div>
                       </div>
 
-                      <p style={{ color: '#555', margin: '0 0 16px', lineHeight: 1.5, fontSize: 14 }}>{master.bio}</p>
+                      <p className="master-bio">{master.bio}</p>
 
-                      {/* Послуги майстра */}
                       {master.services && master.services.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                          <div className="master-tags">
                             {master.services.slice(0, 4).map(s => (
-                                <span key={s.id} style={{
-                                  background: '#f0f0f0', padding: '4px 12px',
-                                  borderRadius: 30, fontSize: 12, whiteSpace: 'nowrap'
-                                }}>
-                        {s.name}
-                      </span>
+                                <span key={s.id} className="service-tag">{s.name}</span>
                             ))}
                             {master.services.length > 4 && (
-                                <span style={{ background: '#e8f7f7', color: '#00a3a6', padding: '4px 12px', borderRadius: 30, fontSize: 12 }}>
-                        +{master.services.length - 4} ще
-                      </span>
+                                <span className="service-tag more">+{master.services.length - 4} ще</span>
                             )}
                           </div>
                       )}
 
-                      <button
-                          onClick={() => setSelectedMaster(master)}
-                          className="btn-primary"
-                          style={{ width: '100%', padding: 14, fontSize: 15 }}
-                      >
-                        Записатися до майстра
-                      </button>
+                      <div className="master-actions">
+                        <button
+                            onClick={() => setSelectedMaster(master)}
+                            className="btn-primary"
+                            style={{ width: '100%', padding: 14, fontSize: 15 }}
+                        >
+                          Записатися до майстра
+                        </button>
+                      </div>
                     </div>
                   </div>
               ))}
             </div>
         )}
 
-        {/* Модалка вибору послуги майстра */}
         {selectedMaster && (
             <MasterBookingModal master={selectedMaster} user={user} onClose={() => setSelectedMaster(null)} />
         )}
@@ -461,8 +526,7 @@ function MasterBookingModal({ master, user, onClose }) {
   return (
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal-content" onClick={e => e.stopPropagation()}>
-          <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#666' }}>✕</button>
-
+          <button onClick={onClose} className="modal-close-btn">✕</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
             <img src={master.photoUrl} alt={master.name} style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover' }} />
             <div>
@@ -470,22 +534,14 @@ function MasterBookingModal({ master, user, onClose }) {
               <span style={{ color: '#888', fontSize: 13 }}>⭐ {master.rating?.toFixed(1) || '5.0'} · {master.reviewCount || 0} відгуків</span>
             </div>
           </div>
-
           <p style={{ fontWeight: 600, marginBottom: 12 }}>Оберіть послугу:</p>
           {master.services && master.services.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 360, overflowY: 'auto' }}>
+              <div className="service-list">
                 {master.services.map(s => (
                     <button
                         key={s.id}
                         onClick={() => setSelectedService(s)}
-                        style={{
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '12px 16px', borderRadius: 10,
-                          border: '1px solid #eee', background: '#fafafa',
-                          cursor: 'pointer', textAlign: 'left', transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#00a3a6'; e.currentTarget.style.background = '#f0fafa'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#eee'; e.currentTarget.style.background = '#fafafa'; }}
+                        className="service-select-btn"
                     >
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{s.name}</div>
@@ -552,19 +608,14 @@ function ProfilePage({ user, setUser }) {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    // Перевірка типу файлу
     if (!file.type.startsWith('image/')) {
       alert('Будь ласка, виберіть зображення.');
       return;
     }
-
-    // Обмеження розміру (наприклад, 2 МБ)
     if (file.size > 2 * 1024 * 1024) {
       alert('Файл завеликий. Максимальний розмір — 2 МБ.');
       return;
     }
-
     const reader = new FileReader();
     reader.onload = (event) => {
       const dataUrl = event.target.result;
@@ -574,8 +625,6 @@ function ProfilePage({ user, setUser }) {
       localStorage.setItem('smartbooking_user', JSON.stringify(updatedUser));
     };
     reader.readAsDataURL(file);
-
-    // Очистити input, щоб можна було вибрати той самий файл повторно
     e.target.value = null;
   };
 
@@ -596,7 +645,6 @@ function ProfilePage({ user, setUser }) {
 
   return (
       <div className="profile-page">
-        {/* Прихований input для вибору файлу */}
         <input
             type="file"
             ref={fileInputRef}
@@ -604,7 +652,6 @@ function ProfilePage({ user, setUser }) {
             accept="image/*"
             onChange={handleFileChange}
         />
-
         <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 40 }}>
           <img
               src={avatarUrl}
@@ -619,13 +666,12 @@ function ProfilePage({ user, setUser }) {
           </div>
         </div>
 
-        {/* ... решта JSX без змін ... */}
         <h2 className="section-title" style={{ marginBottom: 20 }}>Мої записи</h2>
         {loadingBookings ? (
             <p style={{ color: '#888' }}>Завантаження...</p>
         ) : bookings.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: '#888', background: '#f9f9f9', borderRadius: 16, marginBottom: 40 }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>📅</div>
+            <div className="empty-state">
+              <div>📅</div>
               <p>У вас ще немає записів</p>
             </div>
         ) : (
@@ -633,11 +679,7 @@ function ProfilePage({ user, setUser }) {
               {bookings.map(b => {
                 const st = STATUS_LABELS[b.status] || { label: b.status, color: '#888' };
                 return (
-                    <div key={b.id} style={{
-                      background: '#fff', padding: 20, marginBottom: 12,
-                      borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12
-                    }}>
+                    <div key={b.id} className="booking-item">
                       <div>
                         <strong style={{ fontSize: 16 }}>{b.service?.name}</strong>
                         {b.service?.master && <span style={{ color: '#888', fontSize: 14 }}> · {b.service.master.name}</span>}
@@ -650,18 +692,12 @@ function ProfilePage({ user, setUser }) {
                       </div>
                       <div style={{ display: 'flex', gap: 8 }}>
                         {b.status !== 'cancelled' && b.status !== 'completed' && (
-                            <button
-                                onClick={() => cancelBooking(b.id)}
-                                style={{ background: '#dc3545', color: '#fff', padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13 }}
-                            >
+                            <button onClick={() => cancelBooking(b.id)} className="btn-danger">
                               Скасувати
                             </button>
                         )}
                         {b.status === 'completed' && !b.review && (
-                            <button
-                                onClick={() => leaveReview(b.id)}
-                                style={{ background: '#00a3a6', color: '#fff', padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13 }}
-                            >
+                            <button onClick={() => leaveReview(b.id)} className="btn-primary">
                               Залишити відгук
                             </button>
                         )}
@@ -674,24 +710,20 @@ function ProfilePage({ user, setUser }) {
 
         <h2 className="section-title" style={{ marginBottom: 20 }}>Збережені послуги</h2>
         {favoriteServices.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: '#888', background: '#f9f9f9', borderRadius: 16 }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>❤️</div>
+            <div className="empty-state">
+              <div>❤️</div>
               <p>Ви ще не додали жодної послуги в обране</p>
             </div>
         ) : (
             <div className="favorites-grid">
               {favoriteServices.map(service => (
                   <div key={service.id} className="favorite-card">
-                    <img src={getServiceImage(service)} alt={service.name} style={{ width: '100%', height: 140, objectFit: 'cover', borderRadius: 8, marginBottom: 12 }} />
-                    <h3 style={{ fontSize: 16, marginBottom: 4 }}>{service.name}</h3>
-                    <p style={{ fontSize: 13, color: '#666', marginBottom: 8, flex: 1 }}>{service.description?.slice(0, 60)}...</p>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 700, color: '#00a3a6' }}>{service.price} ₴</span>
-                      <button
-                          onClick={() => removeFavorite(service.id)}
-                          style={{ background: 'none', border: 'none', color: '#ff4081', cursor: 'pointer', fontSize: 18 }}
-                          title="Видалити з обраного"
-                      >
+                    <img src={getServiceImage(service)} alt={service.name} loading="lazy" />
+                    <h3>{service.name}</h3>
+                    <p>{service.description?.slice(0, 60)}...</p>
+                    <div className="favorite-card-footer">
+                      <span className="price">{service.price} ₴</span>
+                      <button onClick={() => removeFavorite(service.id)} className="remove-fav-btn" title="Видалити з обраного">
                         ❤️
                       </button>
                     </div>
@@ -703,79 +735,198 @@ function ProfilePage({ user, setUser }) {
   );
 }
 
-/* ─────────── ПАНЕЛЬ МАЙСТРА ─────────── */
+/* ─────────── ПАНЕЛЬ МАЙСТРА (з редагуванням, видаленням, записами) ─────────── */
 function AdminPage({ user, services, setServices }) {
+  const [activeTab, setActiveTab] = useState('services'); // 'services' або 'bookings'
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [duration, setDuration] = useState(60);
   const [category, setCategory] = useState('Стрижка');
   const [description, setDescription] = useState('');
+  const [editingService, setEditingService] = useState(null);
+  const [bookings, setBookings] = useState([]);
+  const [loadingBookings, setLoadingBookings] = useState(false);
 
   const CATEGORIES = ['Стрижка', 'Фарбування', 'Укладка', 'Манікюр', 'Педикюр', 'Масаж', 'Брови та вії', 'Епіляція', 'Макіяж', 'Догляд'];
 
-  const addService = async (e) => {
+  const myServices = services.filter(s => s.masterId === user.id);
+
+  // Завантаження бронювань майстра
+  useEffect(() => {
+    if (activeTab === 'bookings') {
+      setLoadingBookings(true);
+      axios.get(`${API}/masters/${user.id}/bookings`)
+          .then(res => setBookings(res.data))
+          .catch(() => {})
+          .finally(() => setLoadingBookings(false));
+    }
+  }, [activeTab, user.id]);
+
+  const resetForm = () => {
+    setName('');
+    setPrice('');
+    setDuration(60);
+    setCategory('Стрижка');
+    setDescription('');
+    setEditingService(null);
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!description) return alert('Додайте опис послуги');
     try {
-      const res = await axios.post(`${API}/services`, {
-        name, price: +price, durationMin: +duration, masterId: user.id, category, description
-      });
-      setServices([res.data, ...services]);
-      setName(''); setPrice(''); setDescription(''); setDuration(60);
-      alert('✅ Послугу додано!');
+      if (editingService) {
+        const res = await axios.put(`${API}/services/${editingService.id}`, {
+          name, price: +price, durationMin: +duration, category, description
+        });
+        setServices(services.map(s => s.id === editingService.id ? res.data : s));
+        alert('✅ Послугу оновлено!');
+      } else {
+        const res = await axios.post(`${API}/services`, {
+          name, price: +price, durationMin: +duration, masterId: user.id, category, description
+        });
+        setServices([res.data, ...services]);
+        alert('✅ Послугу додано!');
+      }
+      resetForm();
     } catch {
-      alert('Помилка при додаванні послуги');
+      alert('Помилка при збереженні послуги');
     }
   };
 
-  const myServices = services.filter(s => s.masterId === user.id);
+  const handleEdit = (service) => {
+    setEditingService(service);
+    setName(service.name);
+    setPrice(service.price);
+    setDuration(service.durationMin);
+    setCategory(service.category);
+    setDescription(service.description);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Видалити послугу? Це також скасує всі майбутні записи.')) return;
+    try {
+      await axios.delete(`${API}/services/${id}`);
+      setServices(services.filter(s => s.id !== id));
+      alert('Послугу видалено');
+    } catch {
+      alert('Помилка видалення');
+    }
+  };
+
+  const handleBookingStatus = async (bookingId, status) => {
+    try {
+      await axios.patch(`${API}/bookings/${bookingId}`, { status });
+      setBookings(bookings.map(b => b.id === bookingId ? { ...b, status } : b));
+    } catch {
+      alert('Помилка оновлення статусу');
+    }
+  };
 
   return (
-      <div style={{ padding: '40px 5%', maxWidth: 800, margin: '0 auto' }}>
+      <div className="admin-page">
         <h2>Панель майстра — {user.name}</h2>
 
-        <div style={{ background: '#fff', padding: 24, borderRadius: 12, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', marginBottom: 32 }}>
-          <h3 style={{ marginBottom: 16 }}>Додати нову послугу</h3>
-          <form onSubmit={addService} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <input className="input-field" placeholder="Назва послуги" value={name} onChange={e => setName(e.target.value)} required />
-            <select className="input-field" value={category} onChange={e => setCategory(e.target.value)}>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <textarea
-                className="input-field"
-                placeholder="Опис послуги (детально, що входить, матеріали, результат...)"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                rows={3}
-                required
-            />
-            <div style={{ display: 'flex', gap: 12 }}>
-              <input className="input-field" type="number" placeholder="Ціна (₴)" value={price} onChange={e => setPrice(e.target.value)} required />
-              <input className="input-field" type="number" placeholder="Тривалість (хв)" value={duration} onChange={e => setDuration(e.target.value)} />
-            </div>
-            <button className="btn-primary" type="submit">Додати послугу</button>
-          </form>
+        <div className="admin-tabs">
+          <button className={activeTab === 'services' ? 'active' : ''} onClick={() => setActiveTab('services')}>
+            Мої послуги
+          </button>
+          <button className={activeTab === 'bookings' ? 'active' : ''} onClick={() => setActiveTab('bookings')}>
+            Записи клієнтів
+          </button>
         </div>
 
-        <h3>Мої послуги ({myServices.length})</h3>
-        {myServices.length === 0 ? (
-            <p style={{ color: '#888' }}>У вас ще немає доданих послуг</p>
-        ) : (
-            myServices.map(s => (
-                <div key={s.id} style={{
-                  padding: '14px 18px', background: '#fff', marginBottom: 10,
-                  borderRadius: 10, boxShadow: '0 1px 6px rgba(0,0,0,0.05)',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                }}>
-                  <div>
-                    <span style={{ fontWeight: 600 }}>{s.name}</span>
-                    {s.category && <span style={{ marginLeft: 8, fontSize: 12, background: '#f0f0f0', padding: '2px 8px', borderRadius: 12 }}>{s.category}</span>}
-                    <br />
-                    <small style={{ color: '#888' }}>⏱ {s.durationMin} хв</small>
+        {activeTab === 'services' && (
+            <>
+              <div className="admin-form-card">
+                <h3>{editingService ? 'Редагувати послугу' : 'Додати нову послугу'}</h3>
+                <form onSubmit={handleSubmit} className="admin-form">
+                  <input className="input-field" placeholder="Назва послуги" value={name} onChange={e => setName(e.target.value)} required />
+                  <select className="input-field" value={category} onChange={e => setCategory(e.target.value)}>
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <textarea
+                      className="input-field"
+                      placeholder="Опис послуги"
+                      value={description}
+                      onChange={e => setDescription(e.target.value)}
+                      rows={3}
+                      required
+                  />
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <input className="input-field" type="number" placeholder="Ціна (₴)" value={price} onChange={e => setPrice(e.target.value)} required />
+                    <input className="input-field" type="number" placeholder="Тривалість (хв)" value={duration} onChange={e => setDuration(e.target.value)} />
                   </div>
-                  <strong style={{ color: '#00a3a6', fontSize: 16 }}>{s.price} ₴</strong>
-                </div>
-            ))
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button className="btn-primary" type="submit">{editingService ? 'Оновити' : 'Додати'}</button>
+                    {editingService && <button type="button" className="btn-secondary" onClick={resetForm}>Скасувати</button>}
+                  </div>
+                </form>
+              </div>
+
+              <h3>Мої послуги ({myServices.length})</h3>
+              {myServices.length === 0 ? (
+                  <p style={{ color: '#888' }}>У вас ще немає доданих послуг</p>
+              ) : (
+                  myServices.map(s => (
+                      <div key={s.id} className="admin-service-item">
+                        <div>
+                          <span className="service-name">{s.name}</span>
+                          {s.category && <span className="service-category-badge">{s.category}</span>}
+                          <br />
+                          <small>⏱ {s.durationMin} хв</small>
+                        </div>
+                        <strong className="service-price">{s.price} ₴</strong>
+                        <div className="service-actions-admin">
+                          <button className="btn-icon" onClick={() => handleEdit(s)} title="Редагувати">✏️</button>
+                          <button className="btn-icon" onClick={() => handleDelete(s.id)} title="Видалити">🗑️</button>
+                        </div>
+                      </div>
+                  ))
+              )}
+            </>
+        )}
+
+        {activeTab === 'bookings' && (
+            <div>
+              <h3>Записи клієнтів</h3>
+              {loadingBookings ? <p>Завантаження...</p> : bookings.length === 0 ? (
+                  <div className="empty-state">
+                    <div>📋</div>
+                    <p>Немає активних записів</p>
+                  </div>
+              ) : (
+                  <div className="bookings-list">
+                    {bookings.map(b => (
+                        <div key={b.id} className="admin-booking-item">
+                          <div>
+                            <strong>{b.service?.name}</strong>
+                            <div style={{ fontSize: 14, color: '#555' }}>
+                              Клієнт: {b.user?.name || '—'} | {new Date(b.date).toLocaleString('uk-UA')}
+                            </div>
+                            <div style={{ fontSize: 13, marginTop: 4 }}>
+                              Статус: <span style={{ fontWeight: 600, color: b.status === 'pending' ? '#f59e0b' : b.status === 'confirmed' ? '#10b981' : '#888' }}>
+                                {b.status === 'pending' ? 'Очікує' : b.status === 'confirmed' ? 'Підтверджено' : b.status}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="booking-actions">
+                            {b.status === 'pending' && (
+                                <>
+                                  <button className="btn-confirm" onClick={() => handleBookingStatus(b.id, 'confirmed')}>Підтвердити</button>
+                                  <button className="btn-reject" onClick={() => handleBookingStatus(b.id, 'cancelled')}>Відхилити</button>
+                                </>
+                            )}
+                            {b.status === 'confirmed' && (
+                                <button className="btn-complete" onClick={() => handleBookingStatus(b.id, 'completed')}>Завершити</button>
+                            )}
+                          </div>
+                        </div>
+                    ))}
+                  </div>
+              )}
+            </div>
         )}
       </div>
   );
@@ -808,10 +959,10 @@ function AuthPage({ setUser }) {
   };
 
   return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 20px', minHeight: '100vh', background: '#f8f9fa' }}>
-        <div style={{ background: '#fff', padding: 40, borderRadius: 15, boxShadow: '0 10px 30px rgba(0,0,0,0.1)', width: '100%', maxWidth: 420 }}>
-          <h2 style={{ textAlign: 'center', marginBottom: 24 }}>{isLoginMode ? 'Вхід в акаунт' : 'Реєстрація'}</h2>
-          <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="auth-container">
+        <div className="auth-card">
+          <h2>{isLoginMode ? 'Вхід в акаунт' : 'Реєстрація'}</h2>
+          <form onSubmit={handleAuth}>
             {!isLoginMode && (
                 <input className="input-field" placeholder="Ваше ім'я" value={name} onChange={e => setName(e.target.value)} required />
             )}
@@ -827,10 +978,7 @@ function AuthPage({ setUser }) {
               {loading ? 'Завантаження...' : (isLoginMode ? 'Увійти' : 'Зареєструватися')}
             </button>
           </form>
-          <p
-              onClick={() => setIsLoginMode(!isLoginMode)}
-              style={{ textAlign: 'center', marginTop: 20, color: '#00a3a6', cursor: 'pointer', fontSize: 14 }}
-          >
+          <p className="auth-toggle" onClick={() => setIsLoginMode(!isLoginMode)}>
             {isLoginMode ? '← Немає акаунту? Зареєструватись' : 'Вже є акаунт? Увійти →'}
           </p>
         </div>
