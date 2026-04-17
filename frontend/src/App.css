@@ -166,6 +166,9 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
   gap: 24px;
 }
+.service-actions {
+  margin-top: auto;          /* притискає блок з кнопками до низу картки */
+}
 
 /* ─── Картка послуги ─── */
 .service-card {
@@ -176,6 +179,7 @@ body {
   transition: transform 0.2s, box-shadow 0.2s;
   display: flex;
   flex-direction: column;
+  height: 100%;              /* забезпечує однакову висоту в grid */
 }
 
 .service-card:hover {
@@ -195,7 +199,7 @@ body {
   padding: 16px 18px 18px;
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1;                   /* розтягується на всю доступну висоту */
 }
 
 .service-header {

@@ -211,7 +211,7 @@ function HomePage({ services, user }) {
                             <span>⭐ {rating.toFixed(1)}</span>
                             {reviewCount > 0 && <span style={{ color: '#aaa' }}>({reviewCount} відгуків)</span>}
                           </div>
-                          <div style={{ display: 'flex', gap: 10 }}>
+                          <div className="service-actions" style={{ display: 'flex', gap: 10 }}>
                             <button className="btn-book" style={{ flex: 1 }} onClick={() => setSelectedService(service)}>
                               Забронювати
                             </button>
@@ -375,7 +375,7 @@ function MastersPage({ user }) {
 
   return (
       <div style={{ padding: '40px 5%', maxWidth: 1200, margin: '0 auto' }}>
-        <h1 style={{ textAlign: 'center', marginBottom: 10 }}>Наші майстри</h1>
+        <h2 className="section-title" style={{ textAlign: 'center', marginBottom: 10 }}>Наші майстри</h2>
         <p style={{ textAlign: 'center', color: '#666', marginBottom: 40, fontSize: 18 }}>
           Професіонали, яким довіряють тисячі клієнтів у Львові
         </p>
