@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
 import axios from 'axios';
 import './App.css';
@@ -68,7 +68,7 @@ function App() {
           <Route path="/" element={<HomePage services={services} user={user} />} />
           <Route path="/masters" element={<MastersPage user={user} />} />
           <Route path="/login" element={user ? <Navigate to="/" /> : <AuthPage setUser={setUser} />} />
-          <Route path="/profile" element={user ? <ProfilePage user={user} /> : <Navigate to="/login" />} />
+          <Route path="/profile" element={user ? <ProfilePage user={user} setUser={setUser} /> : <Navigate to="/login" />} />
           <Route path="/admin" element={user?.role === 'MASTER' ? <AdminPage user={user} services={services} setServices={setServices} /> : <Navigate to="/" />} />
         </Routes>
       </BrowserRouter>
@@ -504,15 +504,28 @@ function MasterBookingModal({ master, user, onClose }) {
 }
 
 /* ─────────── ПРОФІЛЬ ─────────── */
-function ProfilePage({ user }) {
+function ProfilePage({ user, setUser }) {
   const [bookings, setBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingBookings, setLoadingBookings] = useState(true);
+  const [avatarUrl, setAvatarUrl] = useState(user.photoUrl || 'https://i.pravatar.cc/150');
+  const [favorites, setFavorites] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('favorites') || '[]'); }
+    catch { return []; }
+  });
+  const [allServices, setAllServices] = useState([]);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     axios.get(`${API}/users/${user.id}/bookings`)
-        .then(res => { setBookings(res.data); setLoading(false); })
-        .catch(() => setLoading(false));
+        .then(res => { setBookings(res.data); setLoadingBookings(false); })
+        .catch(() => setLoadingBookings(false));
   }, [user.id]);
+
+  useEffect(() => {
+    axios.get(`${API}/services`)
+        .then(res => setAllServices(res.data))
+        .catch(() => {});
+  }, []);
 
   const cancelBooking = async (id) => {
     if (!window.confirm('Скасувати запис?')) return;
@@ -532,6 +545,48 @@ function ProfilePage({ user }) {
     }
   };
 
+  const handleAvatarClick = () => {
+    fileInputRef.current.click();
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Перевірка типу файлу
+    if (!file.type.startsWith('image/')) {
+      alert('Будь ласка, виберіть зображення.');
+      return;
+    }
+
+    // Обмеження розміру (наприклад, 2 МБ)
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Файл завеликий. Максимальний розмір — 2 МБ.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target.result;
+      setAvatarUrl(dataUrl);
+      const updatedUser = { ...user, photoUrl: dataUrl };
+      setUser(updatedUser);
+      localStorage.setItem('smartbooking_user', JSON.stringify(updatedUser));
+    };
+    reader.readAsDataURL(file);
+
+    // Очистити input, щоб можна було вибрати той самий файл повторно
+    e.target.value = null;
+  };
+
+  const removeFavorite = (serviceId) => {
+    const newFav = favorites.filter(id => id !== serviceId);
+    setFavorites(newFav);
+    localStorage.setItem('favorites', JSON.stringify(newFav));
+  };
+
+  const favoriteServices = allServices.filter(s => favorites.includes(s.id));
+
   const STATUS_LABELS = {
     pending:   { label: 'Очікується', color: '#f59e0b' },
     confirmed: { label: 'Підтверджено', color: '#10b981' },
@@ -541,65 +596,109 @@ function ProfilePage({ user }) {
 
   return (
       <div className="profile-page">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 32 }}>
-          <img src={user.photoUrl || 'https://i.pravatar.cc/80'} alt={user.name}
-               style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }} />
+        {/* Прихований input для вибору файлу */}
+        <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            accept="image/*"
+            onChange={handleFileChange}
+        />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 40 }}>
+          <img
+              src={avatarUrl}
+              alt={user.name}
+              className="profile-avatar"
+              onClick={handleAvatarClick}
+              title="Натисніть, щоб завантажити нове фото"
+          />
           <div>
-            <h1 style={{ margin: 0 }}>Привіт, {user.name}!</h1>
-            <p style={{ color: '#888', margin: 0 }}>{user.email}</p>
+            <h1 style={{ margin: 0, fontSize: 28 }}>Привіт, {user.name}!</h1>
+            <p style={{ color: '#666', margin: '4px 0 0' }}>{user.email}</p>
           </div>
         </div>
 
-        <h2 style={{ marginBottom: 16 }}>Мої записи</h2>
-
-        {loading ? <p style={{ color: '#888' }}>Завантаження...</p> : null}
-
-        {!loading && bookings.length === 0 && (
-            <div style={{ textAlign: 'center', padding: 60, color: '#888' }}>
+        {/* ... решта JSX без змін ... */}
+        <h2 className="section-title" style={{ marginBottom: 20 }}>Мої записи</h2>
+        {loadingBookings ? (
+            <p style={{ color: '#888' }}>Завантаження...</p>
+        ) : bookings.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#888', background: '#f9f9f9', borderRadius: 16, marginBottom: 40 }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>📅</div>
               <p>У вас ще немає записів</p>
             </div>
+        ) : (
+            <div style={{ marginBottom: 40 }}>
+              {bookings.map(b => {
+                const st = STATUS_LABELS[b.status] || { label: b.status, color: '#888' };
+                return (
+                    <div key={b.id} style={{
+                      background: '#fff', padding: 20, marginBottom: 12,
+                      borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12
+                    }}>
+                      <div>
+                        <strong style={{ fontSize: 16 }}>{b.service?.name}</strong>
+                        {b.service?.master && <span style={{ color: '#888', fontSize: 14 }}> · {b.service.master.name}</span>}
+                        <br />
+                        <small style={{ color: '#666' }}>
+                          {new Date(b.date).toLocaleString('uk-UA')}
+                          {' · '}
+                          <span style={{ color: st.color, fontWeight: 600 }}>{st.label}</span>
+                        </small>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {b.status !== 'cancelled' && b.status !== 'completed' && (
+                            <button
+                                onClick={() => cancelBooking(b.id)}
+                                style={{ background: '#dc3545', color: '#fff', padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13 }}
+                            >
+                              Скасувати
+                            </button>
+                        )}
+                        {b.status === 'completed' && !b.review && (
+                            <button
+                                onClick={() => leaveReview(b.id)}
+                                style={{ background: '#00a3a6', color: '#fff', padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13 }}
+                            >
+                              Залишити відгук
+                            </button>
+                        )}
+                      </div>
+                    </div>
+                );
+              })}
+            </div>
         )}
 
-        {bookings.map(b => {
-          const st = STATUS_LABELS[b.status] || { label: b.status, color: '#888' };
-          return (
-              <div key={b.id} style={{
-                background: '#fff', padding: 20, marginBottom: 12,
-                borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12
-              }}>
-                <div>
-                  <strong style={{ fontSize: 16 }}>{b.service?.name}</strong>
-                  {b.service?.master && <span style={{ color: '#888', fontSize: 14 }}> · {b.service.master.name}</span>}
-                  <br />
-                  <small style={{ color: '#666' }}>
-                    {new Date(b.date).toLocaleString('uk-UA')}
-                    {' · '}
-                    <span style={{ color: st.color, fontWeight: 600 }}>{st.label}</span>
-                  </small>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {b.status !== 'cancelled' && b.status !== 'completed' && (
+        <h2 className="section-title" style={{ marginBottom: 20 }}>Збережені послуги</h2>
+        {favoriteServices.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#888', background: '#f9f9f9', borderRadius: 16 }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>❤️</div>
+              <p>Ви ще не додали жодної послуги в обране</p>
+            </div>
+        ) : (
+            <div className="favorites-grid">
+              {favoriteServices.map(service => (
+                  <div key={service.id} className="favorite-card">
+                    <img src={getServiceImage(service)} alt={service.name} style={{ width: '100%', height: 140, objectFit: 'cover', borderRadius: 8, marginBottom: 12 }} />
+                    <h3 style={{ fontSize: 16, marginBottom: 4 }}>{service.name}</h3>
+                    <p style={{ fontSize: 13, color: '#666', marginBottom: 8, flex: 1 }}>{service.description?.slice(0, 60)}...</p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 700, color: '#00a3a6' }}>{service.price} ₴</span>
                       <button
-                          onClick={() => cancelBooking(b.id)}
-                          style={{ background: '#dc3545', color: '#fff', padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13 }}
+                          onClick={() => removeFavorite(service.id)}
+                          style={{ background: 'none', border: 'none', color: '#ff4081', cursor: 'pointer', fontSize: 18 }}
+                          title="Видалити з обраного"
                       >
-                        Скасувати
+                        ❤️
                       </button>
-                  )}
-                  {b.status === 'completed' && !b.review && (
-                      <button
-                          onClick={() => leaveReview(b.id)}
-                          style={{ background: '#00a3a6', color: '#fff', padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13 }}
-                      >
-                        Залишити відгук
-                      </button>
-                  )}
-                </div>
-              </div>
-          );
-        })}
+                    </div>
+                  </div>
+              ))}
+            </div>
+        )}
       </div>
   );
 }
