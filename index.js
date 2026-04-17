@@ -124,6 +124,18 @@ app.post('/api/bookings', async (req, res) => {
     const bookingDate = new Date(`${date}T${time}:00`);
     if (bookingDate <= new Date()) return res.status(400).json({ error: "Дата має бути в майбутньому!" });
 
+    // Перевірка на конфлікт (зайнятість слоту)
+    const existingBooking = await prisma.booking.findFirst({
+        where: {
+            serviceId: parseInt(serviceId),
+            date: bookingDate,
+            status: { not: 'cancelled' }
+        }
+    });
+    if (existingBooking) {
+        return res.status(409).json({ error: "Цей час уже зайнятий. Оберіть інший." });
+    }
+
     const booking = await prisma.booking.create({
         data: {
             userId: parseInt(userId),

@@ -316,6 +316,7 @@ function BookingModal({ service, user, onClose }) {
   const timeSlots = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
   const today = new Date().toISOString().split('T')[0];
 
+  // Завантаження зайнятих слотів при зміні дати
   useEffect(() => {
     if (!date) return;
     const fetchBooked = async () => {
@@ -325,8 +326,11 @@ function BookingModal({ service, user, onClose }) {
           params: { serviceId: service.id, date }
         });
         setBookedSlots(res.data.bookedSlots || []);
-      } catch { setBookedSlots([]); }
-      finally { setLoadingSlots(false); }
+      } catch {
+        setBookedSlots([]);
+      } finally {
+        setLoadingSlots(false);
+      }
     };
     fetchBooked();
   }, [date, service.id]);
@@ -352,8 +356,17 @@ function BookingModal({ service, user, onClose }) {
       });
       alert(`✅ Запис успішно створено!\n\n📋 ${service.name}\n📅 ${date} о ${time}\n👤 ${service.master?.name}`);
       onClose();
-    } catch {
-      alert('❌ Помилка при бронюванні. Спробуйте ще раз.');
+    } catch (error) {
+      if (error.response?.status === 409) {
+        alert('❌ Цей час щойно зайняли. Оберіть інший.');
+        // Оновити список зайнятих слотів після конфлікту
+        const res = await axios.get(`${API}/bookings/availability`, {
+          params: { serviceId: service.id, date }
+        });
+        setBookedSlots(res.data.bookedSlots || []);
+      } else {
+        alert('❌ Помилка при бронюванні. Спробуйте ще раз.');
+      }
     } finally {
       setLoading(false);
     }
@@ -392,7 +405,9 @@ function BookingModal({ service, user, onClose }) {
           />
 
           <label style={{ fontWeight: 600, fontSize: 14, display: 'block', marginBottom: 8 }}>Оберіть час</label>
-          {loadingSlots ? <p>Перевірка зайнятості...</p> : (
+          {loadingSlots ? (
+              <p>Перевірка зайнятості...</p>
+          ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 24 }}>
                 {timeSlots.map(t => {
                   const isBooked = bookedSlots.includes(t);
@@ -680,17 +695,23 @@ function ProfilePage({ user, setUser }) {
                 const st = STATUS_LABELS[b.status] || { label: b.status, color: '#888' };
                 return (
                     <div key={b.id} className="booking-item">
-                      <div>
+                      <div className="booking-info">
                         <strong style={{ fontSize: 16 }}>{b.service?.name}</strong>
                         {b.service?.master && <span style={{ color: '#888', fontSize: 14 }}> · {b.service.master.name}</span>}
                         <br />
                         <small style={{ color: '#666' }}>
-                          {new Date(b.date).toLocaleString('uk-UA')}
+                          {new Date(b.date).toLocaleString('uk-UA', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
                           {' · '}
                           <span style={{ color: st.color, fontWeight: 600 }}>{st.label}</span>
                         </small>
                       </div>
-                      <div style={{ display: 'flex', gap: 8 }}>
+                      <div className="booking-actions">
                         {b.status !== 'cancelled' && b.status !== 'completed' && (
                             <button onClick={() => cancelBooking(b.id)} className="btn-danger">
                               Скасувати
@@ -720,7 +741,7 @@ function ProfilePage({ user, setUser }) {
                   <div key={service.id} className="favorite-card">
                     <img src={getServiceImage(service)} alt={service.name} loading="lazy" />
                     <h3>{service.name}</h3>
-                    <p>{service.description?.slice(0, 60)}...</p>
+                    <p className="favorite-desc">{service.description?.slice(0, 60)}...</p>
                     <div className="favorite-card-footer">
                       <span className="price">{service.price} ₴</span>
                       <button onClick={() => removeFavorite(service.id)} className="remove-fav-btn" title="Видалити з обраного">

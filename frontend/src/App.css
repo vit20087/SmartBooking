@@ -551,9 +551,14 @@ code {
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.booking-info {
+  flex: 1;
+  min-width: 200px;
 }
 
 .favorite-card img {
@@ -657,6 +662,7 @@ code {
 .booking-actions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 .btn-confirm {
   background: #10b981;
