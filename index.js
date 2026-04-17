@@ -18,11 +18,7 @@ const sanitizeUser = (user) => ({
     bio: user.bio
 });
 
-// ======================
-// ДОПОМІЖНІ ФУНКЦІЇ
-// ======================
-
-// Перевірка, чи належить послуга майстру (userId)
+// Допоміжна функція перевірки власника послуги
 const isServiceOwnedByMaster = async (serviceId, masterId) => {
     const service = await prisma.service.findUnique({
         where: { id: parseInt(serviceId) }
@@ -30,9 +26,7 @@ const isServiceOwnedByMaster = async (serviceId, masterId) => {
     return service && service.masterId === parseInt(masterId);
 };
 
-// ======================
-// ЕНДПОІНТИ
-// ======================
+// ====================== ЕНДПОІНТИ ======================
 
 // ---- Послуги ----
 app.get('/api/services', async (req, res) => {
@@ -62,12 +56,10 @@ app.post('/api/services', async (req, res) => {
     }
 });
 
-// Оновлення послуги (тільки власник)
 app.put('/api/services/:id', async (req, res) => {
     const { id } = req.params;
     const { name, description, price, durationMin, category, masterId } = req.body;
 
-    // Перевірка прав: masterId має співпадати з власником послуги
     if (!(await isServiceOwnedByMaster(id, masterId))) {
         return res.status(403).json({ error: 'Недостатньо прав' });
     }
@@ -89,17 +81,15 @@ app.put('/api/services/:id', async (req, res) => {
     }
 });
 
-// Видалення послуги (тільки власник)
 app.delete('/api/services/:id', async (req, res) => {
     const { id } = req.params;
-    const { masterId } = req.query; // очікуємо masterId у query параметрах
+    const { masterId } = req.query;
 
     if (!(await isServiceOwnedByMaster(id, masterId))) {
         return res.status(403).json({ error: 'Недостатньо прав' });
     }
 
     try {
-        // Видалити послугу (якщо каскадне видалення налаштоване, бронювання видаляться автоматично)
         await prisma.service.delete({
             where: { id: parseInt(id) }
         });
@@ -124,16 +114,37 @@ app.post('/api/bookings', async (req, res) => {
     const bookingDate = new Date(`${date}T${time}:00`);
     if (bookingDate <= new Date()) return res.status(400).json({ error: "Дата має бути в майбутньому!" });
 
-    // Перевірка на конфлікт (зайнятість слоту)
-    const existingBooking = await prisma.booking.findFirst({
+    const service = await prisma.service.findUnique({
+        where: { id: parseInt(serviceId) }
+    });
+    if (!service) return res.status(404).json({ error: "Послугу не знайдено" });
+
+    const startOfMinute = new Date(bookingDate);
+    const endOfMinute = new Date(bookingDate);
+    endOfMinute.setMinutes(endOfMinute.getMinutes() + 1);
+
+    // 1. Перевірка майстра
+    const masterBusy = await prisma.booking.findFirst({
         where: {
-            serviceId: parseInt(serviceId),
-            date: bookingDate,
+            service: { masterId: service.masterId },
+            date: { gte: startOfMinute, lt: endOfMinute },
             status: { not: 'cancelled' }
         }
     });
-    if (existingBooking) {
-        return res.status(409).json({ error: "Цей час уже зайнятий. Оберіть інший." });
+    if (masterBusy) {
+        return res.status(409).json({ error: "Майстер уже зайнятий у цей час." });
+    }
+
+    // 2. Перевірка клієнта
+    const clientBusy = await prisma.booking.findFirst({
+        where: {
+            userId: parseInt(userId),
+            date: { gte: startOfMinute, lt: endOfMinute },
+            status: { not: 'cancelled' }
+        }
+    });
+    if (clientBusy) {
+        return res.status(409).json({ error: "У вас уже є запис на цей час." });
     }
 
     const booking = await prisma.booking.create({
@@ -147,63 +158,82 @@ app.post('/api/bookings', async (req, res) => {
     res.json(booking);
 });
 
-// Доступні слоти для послуги на дату
+// Оновлений availability – враховує і майстра, і власні бронювання клієнта
 app.get('/api/bookings/availability', async (req, res) => {
-    const { serviceId, date } = req.query;
+    const { serviceId, date, userId } = req.query;
+    console.log('📥 availability запит:', { serviceId, date, userId });
     if (!serviceId || !date) return res.status(400).json({ error: 'serviceId та date обовʼязкові' });
+
+    const service = await prisma.service.findUnique({
+        where: { id: parseInt(serviceId) }
+    });
+    if (!service) return res.status(404).json({ error: 'Послугу не знайдено' });
 
     const startOfDay = new Date(`${date}T00:00:00`);
     const endOfDay = new Date(`${date}T23:59:59`);
 
-    const bookings = await prisma.booking.findMany({
+    // Зайняті слоти майстра
+    const masterBookings = await prisma.booking.findMany({
         where: {
-            serviceId: parseInt(serviceId),
-            date: {
-                gte: startOfDay,
-                lte: endOfDay
-            },
+            service: { masterId: service.masterId },
+            date: { gte: startOfDay, lte: endOfDay },
             status: { not: 'cancelled' }
         },
         select: { date: true }
     });
 
-    // Форматуємо час у "HH:MM"
-    const bookedSlots = bookings.map(b => {
+    const bookedSlots = masterBookings.map(b => {
         const d = new Date(b.date);
         return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
     });
+    console.log('👨‍🎨 Слоти майстра:', bookedSlots);
 
+    // Якщо передано userId, додаємо його власні бронювання
+    if (userId) {
+        const userBookings = await prisma.booking.findMany({
+            where: {
+                userId: parseInt(userId),
+                date: { gte: startOfDay, lte: endOfDay },
+                status: { not: 'cancelled' }
+            },
+            select: { date: true }
+        });
+
+        const userSlots = userBookings.map(b => {
+            const d = new Date(b.date);
+            return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+        });
+        console.log('🧑 Користувацькі слоти:', userSlots);
+
+        // Додаємо до загального списку без дублів
+        userSlots.forEach(slot => {
+            if (!bookedSlots.includes(slot)) {
+                bookedSlots.push(slot);
+            }
+        });
+    }
+
+    console.log('✅ Фінальний список зайнятих слотів:', bookedSlots);
     res.json({ bookedSlots });
 });
 
-// Отримати бронювання для конкретного майстра
 app.get('/api/masters/:masterId/bookings', async (req, res) => {
     const { masterId } = req.params;
     const bookings = await prisma.booking.findMany({
-        where: {
-            service: {
-                masterId: parseInt(masterId)
-            }
-        },
-        include: {
-            service: true,
-            user: true
-        },
+        where: { service: { masterId: parseInt(masterId) } },
+        include: { service: true, user: true },
         orderBy: { date: 'asc' }
     });
     res.json(bookings);
 });
 
-// Оновити статус бронювання (підтвердити/завершити/скасувати)
 app.patch('/api/bookings/:id', async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
-
     const validStatuses = ['pending', 'confirmed', 'completed', 'cancelled'];
     if (!validStatuses.includes(status)) {
         return res.status(400).json({ error: 'Некоректний статус' });
     }
-
     try {
         const updated = await prisma.booking.update({
             where: { id: parseInt(id) },
@@ -215,7 +245,6 @@ app.patch('/api/bookings/:id', async (req, res) => {
     }
 });
 
-// Скасування бронювання (вже є, але залишимо)
 app.delete('/api/bookings/:id', async (req, res) => {
     await prisma.booking.update({
         where: { id: parseInt(req.params.id) },

@@ -316,15 +316,14 @@ function BookingModal({ service, user, onClose }) {
   const timeSlots = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
   const today = new Date().toISOString().split('T')[0];
 
-  // Завантаження зайнятих слотів при зміні дати
   useEffect(() => {
     if (!date) return;
     const fetchBooked = async () => {
       setLoadingSlots(true);
       try {
-        const res = await axios.get(`${API}/bookings/availability`, {
-          params: { serviceId: service.id, date }
-        });
+        const params = { serviceId: service.id, date };
+        if (user) params.userId = user.id;   // <-- цей рядок має бути
+        const res = await axios.get(`${API}/bookings/availability`, { params });
         setBookedSlots(res.data.bookedSlots || []);
       } catch {
         setBookedSlots([]);
@@ -333,7 +332,7 @@ function BookingModal({ service, user, onClose }) {
       }
     };
     fetchBooked();
-  }, [date, service.id]);
+  }, [date, service.id, user]);
 
   const handleBook = async () => {
     if (!user) {
@@ -358,12 +357,16 @@ function BookingModal({ service, user, onClose }) {
       onClose();
     } catch (error) {
       if (error.response?.status === 409) {
-        alert('❌ Цей час щойно зайняли. Оберіть інший.');
-        // Оновити список зайнятих слотів після конфлікту
-        const res = await axios.get(`${API}/bookings/availability`, {
-          params: { serviceId: service.id, date }
-        });
+        const message = error.response?.data?.error || 'Цей час уже зайнятий.';
+        alert(`❌ ${message}`);
+        // Оновлюємо слоти після конфлікту
+        const params = { serviceId: service.id, date };
+        if (user) params.userId = user.id;
+        const res = await axios.get(`${API}/bookings/availability`, { params });
         setBookedSlots(res.data.bookedSlots || []);
+        if (res.data.bookedSlots.includes(time)) {
+          setTime('');
+        }
       } else {
         alert('❌ Помилка при бронюванні. Спробуйте ще раз.');
       }
@@ -493,9 +496,7 @@ function MastersPage({ user }) {
                           <span style={{ fontSize: 13, color: '#888' }}>({master.reviewCount || 0})</span>
                         </div>
                       </div>
-
                       <p className="master-bio">{master.bio}</p>
-
                       {master.services && master.services.length > 0 && (
                           <div className="master-tags">
                             {master.services.slice(0, 4).map(s => (
@@ -506,7 +507,6 @@ function MastersPage({ user }) {
                             )}
                           </div>
                       )}
-
                       <div className="master-actions">
                         <button
                             onClick={() => setSelectedMaster(master)}
@@ -532,7 +532,6 @@ function MastersPage({ user }) {
 /* Модалка для запису до конкретного майстра */
 function MasterBookingModal({ master, user, onClose }) {
   const [selectedService, setSelectedService] = useState(null);
-  const navigate = useNavigate();
 
   if (selectedService) {
     return <BookingModal service={{ ...selectedService, master }} user={user} onClose={onClose} />;
@@ -756,9 +755,9 @@ function ProfilePage({ user, setUser }) {
   );
 }
 
-/* ─────────── ПАНЕЛЬ МАЙСТРА (з редагуванням, видаленням, записами) ─────────── */
+/* ─────────── ПАНЕЛЬ МАЙСТРА ─────────── */
 function AdminPage({ user, services, setServices }) {
-  const [activeTab, setActiveTab] = useState('services'); // 'services' або 'bookings'
+  const [activeTab, setActiveTab] = useState('services');
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [duration, setDuration] = useState(60);
@@ -772,7 +771,6 @@ function AdminPage({ user, services, setServices }) {
 
   const myServices = services.filter(s => s.masterId === user.id);
 
-  // Завантаження бронювань майстра
   useEffect(() => {
     if (activeTab === 'bookings') {
       setLoadingBookings(true);
@@ -798,7 +796,7 @@ function AdminPage({ user, services, setServices }) {
     try {
       if (editingService) {
         const res = await axios.put(`${API}/services/${editingService.id}`, {
-          name, price: +price, durationMin: +duration, category, description
+          name, price: +price, durationMin: +duration, category, description, masterId: user.id
         });
         setServices(services.map(s => s.id === editingService.id ? res.data : s));
         alert('✅ Послугу оновлено!');
@@ -828,7 +826,7 @@ function AdminPage({ user, services, setServices }) {
   const handleDelete = async (id) => {
     if (!window.confirm('Видалити послугу? Це також скасує всі майбутні записи.')) return;
     try {
-      await axios.delete(`${API}/services/${id}`);
+      await axios.delete(`${API}/services/${id}`, { params: { masterId: user.id } });
       setServices(services.filter(s => s.id !== id));
       alert('Послугу видалено');
     } catch {
@@ -924,7 +922,7 @@ function AdminPage({ user, services, setServices }) {
                           <div>
                             <strong>{b.service?.name}</strong>
                             <div style={{ fontSize: 14, color: '#555' }}>
-                              Клієнт: {b.user?.name || '—'} | {new Date(b.date).toLocaleString('uk-UA')}
+                              Клієнт: {b.user?.name || '—'} | {new Date(b.date).toLocaleString('uk-UA', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                             </div>
                             <div style={{ fontSize: 13, marginTop: 4 }}>
                               Статус: <span style={{ fontWeight: 600, color: b.status === 'pending' ? '#f59e0b' : b.status === 'confirmed' ? '#10b981' : '#888' }}>

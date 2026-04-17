@@ -574,6 +574,14 @@ code {
   align-items: center;
   margin-top: auto;
 }
+
+.favorite-desc {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+  flex: 1;
+}
+
 .remove-fav-btn {
   background: none;
   border: none;
