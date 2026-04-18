@@ -41,20 +41,23 @@ bash
 npm install
 
 # Frontend
+```bash
 cd frontend
 npm install
-
+```
 ### Запуск проекту
-bash
+```bash
 # Запуск бекенду (слухає на порту 3000)
 npm start
-
+```
 # У іншому терміналі - запуск фронтенду
+```bash
 cd frontend
 npm run dev
-
+```
 ### Ініціалізація БД
-bash
+```bash
 # Запуск seed-скриптів для заповнення тестовими даними
 node seed-masters.js
 node seed-services.js
+```
