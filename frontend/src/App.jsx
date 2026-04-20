@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useNavigate, Navigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import './App.css';
 
@@ -72,6 +72,8 @@ function App() {
           <Route path="/login" element={user ? <Navigate to="/" /> : <AuthPage setUser={setUser} />} />
           <Route path="/profile" element={user ? <ProfilePage user={user} setUser={setUser} /> : <Navigate to="/login" />} />
           <Route path="/admin" element={user?.role === 'MASTER' ? <AdminPage user={user} services={services} setServices={setServices} /> : <Navigate to="/" />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
@@ -187,6 +189,8 @@ function HomePage({ services, user }) {
                   const isFav = favorites.includes(service.id);
                   const rating = service.master?.rating || 4.8;
                   const reviewCount = service.master?.reviewCount || 0;
+                  const isOwnService = user && user.id === service.masterId;
+
                   return (
                       <div className="service-card" key={service.id}>
                         <img src={getServiceImage(service)} alt={service.name} className="service-image" loading="lazy" />
@@ -226,7 +230,13 @@ function HomePage({ services, user }) {
                             {reviewCount > 0 && <span style={{ color: '#aaa' }}>({reviewCount} відгуків)</span>}
                           </div>
                           <div className="service-actions">
-                            <button className="btn-book" style={{ flex: 1 }} onClick={() => setSelectedService(service)}>
+                            <button
+                                className="btn-book"
+                                style={{ flex: 1 }}
+                                onClick={() => !isOwnService && setSelectedService(service)}
+                                disabled={isOwnService}
+                                title={isOwnService ? 'Ви не можете забронювати власну послугу' : 'Забронювати'}
+                            >
                               Забронювати
                             </button>
                             <button
@@ -300,7 +310,7 @@ function ReviewsModal({ service, onClose }) {
   );
 }
 
-/* ─────────── МОДАЛКА БРОНЮВАННЯ (з перевіркою слотів) ─────────── */
+/* ─────────── МОДАЛКА БРОНЮВАННЯ ─────────── */
 function BookingModal({ service, user, onClose }) {
   const [date, setDate] = useState(() => {
     const d = new Date();
@@ -322,7 +332,7 @@ function BookingModal({ service, user, onClose }) {
       setLoadingSlots(true);
       try {
         const params = { serviceId: service.id, date };
-        if (user) params.userId = user.id;   // <-- цей рядок має бути
+        if (user) params.userId = user.id;
         const res = await axios.get(`${API}/bookings/availability`, { params });
         setBookedSlots(res.data.bookedSlots || []);
       } catch {
@@ -356,10 +366,9 @@ function BookingModal({ service, user, onClose }) {
       alert(`✅ Запис успішно створено!\n\n📋 ${service.name}\n📅 ${date} о ${time}\n👤 ${service.master?.name}`);
       onClose();
     } catch (error) {
-      if (error.response?.status === 409) {
+      if (error.response?.status === 409 || error.response?.status === 403) {
         const message = error.response?.data?.error || 'Цей час уже зайнятий.';
         alert(`❌ ${message}`);
-        // Оновлюємо слоти після конфлікту
         const params = { serviceId: service.id, date };
         if (user) params.userId = user.id;
         const res = await axios.get(`${API}/bookings/availability`, { params });
@@ -485,40 +494,45 @@ function MastersPage({ user }) {
             </div>
         ) : (
             <div className="masters-grid">
-              {masters.map(master => (
-                  <div key={master.id} className="master-card">
-                    <img src={master.photoUrl} alt={master.name} loading="lazy" />
-                    <div className="master-content">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <h3 style={{ margin: 0, fontSize: 20 }}>{master.name}</h3>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          ⭐ <strong>{master.rating ? master.rating.toFixed(1) : '5.0'}</strong>
-                          <span style={{ fontSize: 13, color: '#888' }}>({master.reviewCount || 0})</span>
+              {masters.map(master => {
+                const isSelf = user && user.id === master.id;
+                return (
+                    <div key={master.id} className="master-card">
+                      <img src={master.photoUrl} alt={master.name} loading="lazy" />
+                      <div className="master-content">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <h3 style={{ margin: 0, fontSize: 20 }}>{master.name}</h3>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            ⭐ <strong>{master.rating ? master.rating.toFixed(1) : '5.0'}</strong>
+                            <span style={{ fontSize: 13, color: '#888' }}>({master.reviewCount || 0})</span>
+                          </div>
+                        </div>
+                        <p className="master-bio">{master.bio}</p>
+                        {master.services && master.services.length > 0 && (
+                            <div className="master-tags">
+                              {master.services.slice(0, 4).map(s => (
+                                  <span key={s.id} className="service-tag">{s.name}</span>
+                              ))}
+                              {master.services.length > 4 && (
+                                  <span className="service-tag more">+{master.services.length - 4} ще</span>
+                              )}
+                            </div>
+                        )}
+                        <div className="master-actions">
+                          <button
+                              onClick={() => !isSelf && setSelectedMaster(master)}
+                              className="btn-primary"
+                              disabled={isSelf}
+                              style={{ width: '100%', padding: 14, fontSize: 15 }}
+                              title={isSelf ? 'Це ваш власний профіль' : 'Записатися до майстра'}
+                          >
+                            {isSelf ? 'Це ви' : 'Записатися до майстра'}
+                          </button>
                         </div>
                       </div>
-                      <p className="master-bio">{master.bio}</p>
-                      {master.services && master.services.length > 0 && (
-                          <div className="master-tags">
-                            {master.services.slice(0, 4).map(s => (
-                                <span key={s.id} className="service-tag">{s.name}</span>
-                            ))}
-                            {master.services.length > 4 && (
-                                <span className="service-tag more">+{master.services.length - 4} ще</span>
-                            )}
-                          </div>
-                      )}
-                      <div className="master-actions">
-                        <button
-                            onClick={() => setSelectedMaster(master)}
-                            className="btn-primary"
-                            style={{ width: '100%', padding: 14, fontSize: 15 }}
-                        >
-                          Записатися до майстра
-                        </button>
-                      </div>
                     </div>
-                  </div>
-              ))}
+                );
+              })}
             </div>
         )}
 
@@ -532,6 +546,7 @@ function MastersPage({ user }) {
 /* Модалка для запису до конкретного майстра */
 function MasterBookingModal({ master, user, onClose }) {
   const [selectedService, setSelectedService] = useState(null);
+  const isSelf = user && user.id === master.id;
 
   if (selectedService) {
     return <BookingModal service={{ ...selectedService, master }} user={user} onClose={onClose} />;
@@ -554,8 +569,11 @@ function MasterBookingModal({ master, user, onClose }) {
                 {master.services.map(s => (
                     <button
                         key={s.id}
-                        onClick={() => setSelectedService(s)}
+                        onClick={() => !isSelf && setSelectedService(s)}
+                        disabled={isSelf}
                         className="service-select-btn"
+                        title={isSelf ? 'Ви не можете забронювати власну послугу' : ''}
+                        style={{ opacity: isSelf ? 0.6 : 1, cursor: isSelf ? 'not-allowed' : 'pointer' }}
                     >
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{s.name}</div>
@@ -997,8 +1015,149 @@ function AuthPage({ setUser }) {
               {loading ? 'Завантаження...' : (isLoginMode ? 'Увійти' : 'Зареєструватися')}
             </button>
           </form>
+          <p style={{ textAlign: 'center', marginTop: 10 }}>
+            <Link to="/forgot-password" style={{ color: '#00a3a6', textDecoration: 'none', fontSize: 14 }}>
+              Забули пароль?
+            </Link>
+          </p>
           <p className="auth-toggle" onClick={() => setIsLoginMode(!isLoginMode)}>
             {isLoginMode ? '← Немає акаунту? Зареєструватись' : 'Вже є акаунт? Увійти →'}
+          </p>
+        </div>
+      </div>
+  );
+}
+
+/* ─────────── ВІДНОВЛЕННЯ ПАРОЛЮ ─────────── */
+function ForgotPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage('');
+    try {
+      await axios.post(`${API}/forgot-password`, { email });
+      setMessage('Інструкції з відновлення надіслано на вашу електронну пошту.');
+      setTimeout(() => navigate('/login'), 3000);
+    } catch (error) {
+      setMessage('Помилка. Спробуйте ще раз.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+      <div className="auth-container">
+        <div className="auth-card">
+          <h2>Відновлення паролю</h2>
+          <p style={{ marginBottom: 20, color: '#666' }}>Введіть email, на який зареєстровано акаунт.</p>
+          {message && <p style={{ color: '#00a3a6', marginBottom: 15 }}>{message}</p>}
+          <form onSubmit={handleSubmit}>
+            <input
+                className="input-field"
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+            />
+            <button className="btn-primary" type="submit" disabled={loading} style={{ width: '100%' }}>
+              {loading ? 'Відправка...' : 'Надіслати інструкції'}
+            </button>
+          </form>
+          <p style={{ textAlign: 'center', marginTop: 20 }}>
+            <Link to="/login" style={{ color: '#00a3a6', textDecoration: 'none' }}>← Повернутися до входу</Link>
+          </p>
+        </div>
+      </div>
+  );
+}
+
+function ResetPasswordPage() {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
+
+  useEffect(() => {
+    if (!token) {
+      setError('Відсутній токен для скидання паролю.');
+    }
+  }, [token]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (password !== confirmPassword) {
+      setError('Паролі не співпадають');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Пароль має містити щонайменше 8 символів');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    setMessage('');
+    try {
+      await axios.post(`${API}/reset-password`, { token, password });
+      setMessage('Пароль успішно змінено! Зараз ви будете перенаправлені на сторінку входу.');
+      setTimeout(() => navigate('/login'), 3000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Помилка скидання паролю. Можливо, токен недійсний.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!token) {
+    return (
+        <div className="auth-container">
+          <div className="auth-card">
+            <h2>Помилка</h2>
+            <p style={{ color: '#dc3545' }}>Невірне посилання для скидання паролю.</p>
+            <Link to="/login" className="btn-primary" style={{ display: 'inline-block', marginTop: 20 }}>На сторінку входу</Link>
+          </div>
+        </div>
+    );
+  }
+
+  return (
+      <div className="auth-container">
+        <div className="auth-card">
+          <h2>Новий пароль</h2>
+          {message && <p style={{ color: '#00a3a6', marginBottom: 15 }}>{message}</p>}
+          {error && <p style={{ color: '#dc3545', marginBottom: 15 }}>{error}</p>}
+          <form onSubmit={handleSubmit}>
+            <input
+                className="input-field"
+                type="password"
+                placeholder="Новий пароль"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+            />
+            <input
+                className="input-field"
+                type="password"
+                placeholder="Підтвердження паролю"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                required
+            />
+            <button className="btn-primary" type="submit" disabled={loading} style={{ width: '100%' }}>
+              {loading ? 'Збереження...' : 'Змінити пароль'}
+            </button>
+          </form>
+          <p style={{ textAlign: 'center', marginTop: 20 }}>
+            <Link to="/login" style={{ color: '#00a3a6', textDecoration: 'none' }}>← Повернутися до входу</Link>
           </p>
         </div>
       </div>

@@ -285,6 +285,12 @@ body {
   background-color: #00a3a6;
 }
 
+.btn-book:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 /* ─── Форма (input) ─── */
 .input-field {
   width: 100%;
@@ -700,14 +706,16 @@ code {
   font-size: 13px;
 }
 
-/* Сторінка авторизації */
+/* Сторінка авторизації та відновлення паролю */
 .auth-container {
   display: flex;
   justify-content: center;
-  padding: 80px 20px;
+  align-items: center;
   min-height: 100vh;
   background: #f8f9fa;
+  padding: 20px;
 }
+
 .auth-card {
   background: #fff;
   padding: 40px;
@@ -715,13 +723,105 @@ code {
   box-shadow: 0 10px 30px rgba(0,0,0,0.1);
   width: 100%;
   max-width: 420px;
+  color: #1a1a1a;                /* базовий темний колір */
 }
+
+.auth-card h2 {
+  text-align: center;
+  margin-bottom: 24px;
+  color: #1a1a1a;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.auth-card p {
+  color: #333;
+  margin-bottom: 16px;
+}
+
+.auth-card label {
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
+.auth-card .input-field {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s;
+  background: #fff;
+  color: #1a1a1a;
+  margin-bottom: 14px;
+}
+
+.auth-card .input-field:focus {
+  border-color: #00a3a6;
+}
+
+.auth-card .input-field::placeholder {
+  color: #888;
+  opacity: 1;
+}
+
+.auth-card .btn-primary {
+  width: 100%;
+  padding: 13px 20px;
+  background-color: #00a3a6;
+  color: white !important;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.auth-card .btn-primary:hover {
+  background-color: #008c8e;
+}
+
+.auth-card .btn-primary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.auth-card a {
+  color: #00a3a6;
+  text-decoration: none;
+}
+
+.auth-card a:hover {
+  text-decoration: underline;
+}
+
 .auth-toggle {
   text-align: center;
   margin-top: 20px;
   color: #00a3a6;
   cursor: pointer;
   font-size: 14px;
+}
+
+.auth-toggle:hover {
+  text-decoration: underline;
+}
+
+/* Повідомлення про помилку/успіх на auth-сторінках */
+.auth-card .error-message,
+.auth-card .success-message {
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+.auth-card .error-message {
+  color: #dc3545;
+}
+
+.auth-card .success-message {
+  color: #00a3a6;
 }
 
 /* Майстер картка */
@@ -733,7 +833,7 @@ code {
   transition: transform 0.2s, box-shadow 0.2s;
   display: flex;
   flex-direction: column;
-  height: 100%;               /* займає всю висоту комірки grid */
+  height: 100%;
 }
 
 .master-card:hover {
@@ -747,11 +847,12 @@ code {
   object-fit: cover;
   flex-shrink: 0;
 }
+
 .master-content {
   padding: 20px;
   display: flex;
   flex-direction: column;
-  flex: 1;                    /* розтягує контент */
+  flex: 1;
 }
 
 .master-bio {
@@ -760,7 +861,7 @@ code {
   line-height: 1.5;
   font-size: 14px;
   display: -webkit-box;
-  -webkit-line-clamp: 3;       /* обмежує біографію до 3 рядків */
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -773,7 +874,7 @@ code {
 }
 
 .master-actions {
-  margin-top: auto;            /* притискає кнопку до низу */
+  margin-top: auto;
 }
 
 /* Сітка майстрів */
@@ -781,7 +882,7 @@ code {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 30px;
-  align-items: stretch;        /* розтягує всі картки в рядку */
+  align-items: stretch;
 }
 
 .service-tag {
@@ -804,6 +905,7 @@ code {
   max-height: 360px;
   overflow-y: auto;
 }
+
 .service-select-btn {
   display: flex;
   justify-content: space-between;
@@ -816,6 +918,7 @@ code {
   text-align: left;
   transition: all 0.2s;
 }
+
 .service-select-btn:hover {
   border-color: #00a3a6;
   background: #f0fafa;

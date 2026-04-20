@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const { PrismaClient } = require('@prisma/client');
 
 const app = express();
@@ -25,6 +27,25 @@ const isServiceOwnedByMaster = async (serviceId, masterId) => {
     });
     return service && service.masterId === parseInt(masterId);
 };
+
+// Налаштування тестового SMTP (ethereal)
+let transporter;
+nodemailer.createTestAccount((err, account) => {
+    if (err) {
+        console.error('Failed to create test account:', err);
+        return;
+    }
+    transporter = nodemailer.createTransport({
+        host: account.smtp.host,
+        port: account.smtp.port,
+        secure: account.smtp.secure,
+        auth: {
+            user: account.user,
+            pass: account.pass
+        }
+    });
+    console.log('📧 Test email account ready. Emails will be logged to console.');
+});
 
 // ====================== ЕНДПОІНТИ ======================
 
@@ -119,6 +140,11 @@ app.post('/api/bookings', async (req, res) => {
     });
     if (!service) return res.status(404).json({ error: "Послугу не знайдено" });
 
+    // Заборона майстру бронювати власну послугу
+    if (parseInt(userId) === service.masterId) {
+        return res.status(403).json({ error: "Ви не можете забронювати власну послугу." });
+    }
+
     const startOfMinute = new Date(bookingDate);
     const endOfMinute = new Date(bookingDate);
     endOfMinute.setMinutes(endOfMinute.getMinutes() + 1);
@@ -158,10 +184,8 @@ app.post('/api/bookings', async (req, res) => {
     res.json(booking);
 });
 
-// Оновлений availability – враховує і майстра, і власні бронювання клієнта
 app.get('/api/bookings/availability', async (req, res) => {
     const { serviceId, date, userId } = req.query;
-    console.log('📥 availability запит:', { serviceId, date, userId });
     if (!serviceId || !date) return res.status(400).json({ error: 'serviceId та date обовʼязкові' });
 
     const service = await prisma.service.findUnique({
@@ -186,7 +210,6 @@ app.get('/api/bookings/availability', async (req, res) => {
         const d = new Date(b.date);
         return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
     });
-    console.log('👨‍🎨 Слоти майстра:', bookedSlots);
 
     // Якщо передано userId, додаємо його власні бронювання
     if (userId) {
@@ -203,9 +226,7 @@ app.get('/api/bookings/availability', async (req, res) => {
             const d = new Date(b.date);
             return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
         });
-        console.log('🧑 Користувацькі слоти:', userSlots);
 
-        // Додаємо до загального списку без дублів
         userSlots.forEach(slot => {
             if (!bookedSlots.includes(slot)) {
                 bookedSlots.push(slot);
@@ -213,7 +234,6 @@ app.get('/api/bookings/availability', async (req, res) => {
         });
     }
 
-    console.log('✅ Фінальний список зайнятих слотів:', bookedSlots);
     res.json({ bookedSlots });
 });
 
@@ -317,6 +337,72 @@ app.post('/api/login', async (req, res) => {
         return res.status(401).json({ error: "Невірний email або пароль." });
     }
     res.json(sanitizeUser(user));
+});
+
+// ---- Відновлення паролю ----
+app.post('/api/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email обовʼязковий' });
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+        return res.json({ message: 'Якщо email зареєстровано, на нього надіслано інструкції з відновлення.' });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 3600000); // 1 година
+
+    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+
+    await prisma.passwordResetToken.create({
+        data: {
+            token,
+            userId: user.id,
+            expiresAt
+        }
+    });
+
+    const resetUrl = `http://localhost:5173/reset-password?token=${token}`;
+
+    if (transporter) {
+        const info = await transporter.sendMail({
+            from: '"SmartBooking" <noreply@smartbooking.com>',
+            to: email,
+            subject: 'Відновлення паролю SmartBooking',
+            text: `Перейдіть за посиланням, щоб скинути пароль: ${resetUrl}`,
+            html: `<p>Перейдіть за посиланням, щоб скинути пароль:</p><a href="${resetUrl}">${resetUrl}</a><p>Посилання дійсне 1 годину.</p>`
+        });
+        console.log('📧 Preview URL: %s', nodemailer.getTestMessageUrl(info));
+    } else {
+        console.log(`🔗 Reset link for ${email}: ${resetUrl}`);
+    }
+
+    res.json({ message: 'Якщо email зареєстровано, на нього надіслано інструкції з відновлення.' });
+});
+
+app.post('/api/reset-password', async (req, res) => {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: 'Токен та новий пароль обовʼязкові' });
+    if (password.length < 8) return res.status(400).json({ error: 'Пароль має містити щонайменше 8 символів' });
+
+    const resetToken = await prisma.passwordResetToken.findUnique({
+        where: { token },
+        include: { user: true }
+    });
+
+    if (!resetToken || resetToken.expiresAt < new Date()) {
+        return res.status(400).json({ error: 'Токен недійсний або прострочений' });
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+    await prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { password: hashed }
+    });
+
+    await prisma.passwordResetToken.delete({ where: { id: resetToken.id } });
+
+    res.json({ message: 'Пароль успішно змінено. Тепер ви можете увійти.' });
 });
 
 app.listen(3000, () => console.log('🚀 SmartBooking сервер запущено на 3000'));

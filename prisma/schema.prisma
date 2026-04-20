@@ -12,18 +12,18 @@ model User {
   name         String
   email        String    @unique
   password     String
-  role         String    @default("CLIENT")   // CLIENT | MASTER | ADMIN
+  role         String    @default("CLIENT")
   photoUrl     String?   @default("https://i.pravatar.cc/300")
   bio          String?   @default("Професійний майстер з 5+ роками досвіду")
   rating       Float     @default(0)
   reviewCount  Int       @default(0)
   createdAt    DateTime  @default(now())
 
-  // Відносини
   services        Service[] @relation("MasterServices")
   bookings        Booking[]
   reviewsGiven    Review[]  @relation("Reviewer")
   reviewsReceived Review[]  @relation("MasterReviews")
+  resetTokens     PasswordResetToken[]   // <- ОСЬ ЦЕ ДОДАНО
 }
 
 model Service {
@@ -68,4 +68,13 @@ model Review {
   booking   Booking  @relation(fields: [bookingId], references: [id])
   user      User     @relation("Reviewer", fields: [userId], references: [id])
   master    User     @relation("MasterReviews", fields: [masterId], references: [id])
+}
+
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 }

@@ -15,7 +15,8 @@
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.1",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "nodemailer": "^8.0.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
