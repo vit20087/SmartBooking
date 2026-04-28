@@ -636,7 +636,8 @@ function ProfilePage({ user, setUser }) {
   const handleAvatarClick = () => {
     fileInputRef.current.click();
   };
-
+//Не хендлиться зображення ,постійно збивається
+//  TODO: Пофіксити завантаження автару ,зробити підвантаження в DB .Зображення постійно підтягується з посилань ,навіть якщо це профіль.
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
